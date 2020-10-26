@@ -1,10 +1,11 @@
 #include "main.h"
 
 
-            #include "./inc/font.h"
-             #include "./inc/cJSON.h"
+            // #include "./inc/font.h"
+            //  #include "./inc/cJSON.h"
 
-
+#include <netdb.h>
+#define DEBUG
 typedef struct city_info
 {
     char id[20];
@@ -38,6 +39,7 @@ typedef struct day_info
 
 
 int check_cmd( char  *cmd);
+bool check_ip(char *cmd);
 void *time_show_bmp(void * arg);
 bool show_session(char *session);
 struct LcdDevice *init_lcd(const char *device);
@@ -54,12 +56,18 @@ void *time_show_chat(void * arg);
 void handler_exit(int arg);
 void shutdown_0();
 
+int get_pic();
+void pic_download_show();
+void music_get();
 enum position
 {
     EXIT=0,
     SHOTDOWN,
     WEATHER,
-    CHAT
+    CHAT,
+    PIC,
+    IP
+
 };
 
 enum weather_status
@@ -77,6 +85,9 @@ enum weather_status
 pthread_t tid;
 int main()
 {
+
+
+
     signal(2,handler_exit);
     pthread_create(&tid,NULL,time_show_bmp,NULL);
     pthread_detach(tid);
@@ -84,6 +95,7 @@ int main()
     {
         char cmd[256]={0};
         show_session("你需要什么帮助么？\n");
+        printf("请问你需要什么帮助么?\n");
         scanf("%s",cmd);
         int ret=check_cmd(cmd);
 
@@ -103,6 +115,19 @@ int main()
                 pthread_create(&tid,NULL,time_show_chat,NULL);
                 pthread_detach(tid);
                 weather();
+                break;
+            }
+            case PIC:
+            {
+                pthread_cancel(tid);              
+                pic_download_show();
+                break;
+            }
+            case IP:
+            {
+                pthread_cancel(tid);
+                //music_get();
+
                 break;
             }
             case SHOTDOWN: 
@@ -226,7 +251,7 @@ void *time_show_bmp(void * arg)
     {
         bzero(name,100);
         sprintf(name,"/mora/network_project/pic/3-%d.jpg",i);
-        lcd_draw_jpg(0,0,name);
+        lcd_draw_jpg(0,0,name,0);
         if(i==50)
         {
             i=1;
@@ -248,7 +273,7 @@ void *time_show_chat(void * arg)
     {
         bzero(name,100);
         sprintf(name,"/mora/network_project/pic/chat/1-%d.jpg",i);
-        lcd_draw_jpg(0,0,name);
+        lcd_draw_jpg(0,0,name,0);
         if(i==50)
         {
             i=1;
@@ -280,7 +305,7 @@ void shutdown_0()
     {
         bzero(name,100);
         sprintf(name,"/mora/network_project/pic/shutdown/1-%d.jpg",i);
-        lcd_draw_jpg(0,0,name);
+        lcd_draw_jpg(0,0,name,0);
         if(i==56)
         {
             return ;
@@ -369,8 +394,15 @@ int check_cmd( char  *cmd)
     {
         return SHOTDOWN;
     }
-
-    return true;
+    if(strstr(cmd,"图片下载"))
+    {
+        return PIC;
+    }
+    if(strstr(cmd,"ip"))
+    {
+        return IP;
+    }
+    return 10;
 
 }
 
@@ -496,7 +528,7 @@ void weather()
             
             //显示天气框图
 
-            lcd_draw_jpg(0,0,"./weather.jpg");
+            lcd_draw_jpg(0,0,"./weather.jpg",0);
             show_weather_title();
             usleep(100);
             int x=0;
@@ -509,7 +541,38 @@ void weather()
             }
             
 
-            sleep(10);
+            //sleep(10);
+                                    ///监控键盘，按任意键退出天气显示，或者等待达到   显示时间   20s
+            fd_set set;
+            FD_ZERO(&set);
+            FD_SET(0,&set);
+            struct timeval time;
+            time.tv_sec=20;
+            time.tv_usec=0;
+            char cmdd[200];
+            ret=select(1,&set,NULL,NULL,&time);
+            if(ret>0)
+            {
+                if(FD_ISSET(0,&set))
+                {
+                    scanf("%s",cmdd);
+                    printf("正在退出。。。\n");
+                    return ;
+
+                }
+            }
+            if(ret==0)
+            {
+                printf("到达最大显示时间\n");
+                return ;
+            }
+            if(ret<0)
+            {
+                return ;
+            }
+
+
+
             return ;
             
 
@@ -518,6 +581,50 @@ void weather()
 
     }
 
+
+}
+
+
+
+
+//临时》》
+void get_TS()
+{
+    struct hostent *host=gethostbyname("v1.alapi.cn");
+    int tcp_socket=socket(AF_INET, SOCK_STREAM, 0);
+    if(tcp_socket<0)
+    {
+        perror("");
+        return ;
+    }
+
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(80); //HTTP 协议默认的端口就是 80 
+    server_addr.sin_addr.s_addr = inet_addr("43.248.190.76"); //服务器的IP地址
+
+
+    //http://api.qingyunke.com/api.php
+
+
+
+    int ret = connect(tcp_socket,(struct sockaddr *)&server_addr,sizeof(server_addr));
+    if(ret < 0)
+    {
+        printf("链接失败\n");
+        return ;
+    }
+    else
+    {
+        printf("链接成功\n");
+    }
+
+    //制定 HTTP 请求协议   
+    char  http_head[1024]={0};
+    char  cmd[100]={0};
+    sprintf(http_head,"GET /api/rand.music?sort=热歌榜&format=json HTTP/1.1\r\nHost:api.uomg.com\r\n\r\n",cmd);
+    printf("cmd:%s\n",http_head);
+    int i=0;
 
 }
 
@@ -741,7 +848,7 @@ void show_weather_bmp(info *day,int x)
         sprintf(name,"./weather/%d.jpg",OVERCAST);
     }
 
-    lcd_draw_jpg(x,120,name);
+    lcd_draw_jpg(x,120,name,0);
     usleep(100);
     lcd_close();
 
@@ -781,5 +888,270 @@ bool show_weather_title()
 	destroyBitmap(bm);
 	
 }
+
+
+
+
+
+
+int get_pic()
+{
+    struct hostent *main_host;
+    for(int i=0;i<=3;i++)
+    {
+        if(i==3)
+        {
+            show_session("出现错误了亲");
+            sleep(2);
+            return 0;
+        }
+        main_host=gethostbyname("www.dmoe.cc");
+        if(main_host==NULL)
+        {
+            continue;
+        }
+        break;
+    }
+	int tcp_socket1 = socket(AF_INET, SOCK_STREAM, 0);
+
+
+    struct sockaddr_in service_addr_1;
+    service_addr_1.sin_port = htons(80);
+    service_addr_1.sin_family = AF_INET;
+    service_addr_1.sin_addr.s_addr = inet_addr(inet_ntoa(*(struct in_addr*)main_host->h_addr_list[0])); //服务器的IP地址
+
+    int ret = connect(tcp_socket1, (struct sockaddr *)&service_addr_1,sizeof(service_addr_1));
+        if (ret == -1 )
+        {
+            printf("connect lost!!!\n");
+            return -1;
+        }else
+        {
+            printf("connect success!!!\n");
+        }
+
+        
+
+        char *http_head_1 = "GET /random.php HTTP/1.1\r\nHOST:www.dmoe.cc\r\n\r\n";
+
+        write(tcp_socket1,http_head_1,strlen(http_head_1));
+
+        char  head_1[2048*100] ={0};
+        read(tcp_socket1,head_1,sizeof(head_1));
+        printf("%s\n",head_1);
+
+		char *p = strstr(head_1,"Location: ");
+        char *p1 = strstr(head_1,".jpg");
+        int txt_len = (int)(p1-p);
+        char content[1024] = {0};
+        strncpy(content,p,txt_len);
+        
+        char *ch ="/";
+        char *p3 = strtok(content,ch);
+        char new_http_head[1024] = {0};
+        char yuming[50] ={0};
+        char URL[100] ={0};
+        
+        p3 = strtok(NULL,ch);
+        
+        strcpy(yuming,p3);
+        
+        p3 = strtok(NULL,ch);
+        
+        sprintf(URL,"/%s",p3);
+        p3 = strtok(NULL,ch);
+        
+        sprintf(URL,"%s/%s.jpg",URL,p3);
+        
+
+        sprintf(new_http_head,"GET %s HTTP/1.1\r\nHOST:%s\r\n\r\n",URL,yuming);
+        struct hostent *host=gethostbyname(yuming);
+
+
+        printf("%s\n",new_http_head);
+
+
+        printf("%s\n",host->h_addr_list[0]);
+
+
+#ifdef DEBUG	
+   //1.创建TCP socket  
+       
+	int tcp_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+  // 2.设置服务器的IP地址并链接    
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(80); //HTTP 协议默认的端口就是 80 
+    //server_addr.sin_addr.s_addr = inet_addr("183.60.138.230"); //服务器的IP地址
+    server_addr.sin_addr.s_addr = inet_addr(inet_ntoa(*(struct in_addr*)host->h_addr_list[0])); //服务器的IP地址
+											//图片的地址 
+
+  // 3.链接 
+  int ret1 = connect(tcp_socket,(struct sockaddr *)&server_addr,sizeof(server_addr));
+	  if(ret1 < 0)
+	  {
+		printf("链接失败\n");
+		return 0;
+	  }
+	  else
+	  {
+		  printf("链接成功\n");
+	  }
+			
+	//制定 HTTP 请求协议   重点！！！ 
+	/* char  *http_head = "GET /large/0072Vf1pgy1foxkiswmqaj31kw0w0kh8.jpg HTTP/1.1\r\nHost:tva1.sinaimg.cn\r\n\r\n"; */
+														
+
+	//发HTTTP 请求协议  
+	write(tcp_socket,new_http_head,strlen(new_http_head));
+	
+	
+	//新建一个文件  
+
+
+       int fd=open("./download/1.jpeg",O_RDWR|O_CREAT|O_TRUNC,0777);
+			if(fd < 0)
+			{
+				perror("");
+				return -1;
+			}
+	
+	//读取头数据  
+	char  head[2048]={0}; 
+	int size1 = read(tcp_socket,head,2048);  
+		printf("size1 = %d\n",size1);
+	//取出文件的大小 
+	int file_size=0;
+	//下载的大小 
+	int load_size=0;
+	
+	char *p10 =  strstr(head,"Content-Length");  //查找关键字
+	
+	sscanf(p10,"Content-Length:%d\r\n",&file_size);
+	
+	printf("file_size=%d\n",file_size);
+	
+	
+	//求出头数据的长度 
+	p10 = strstr(head,"\r\n\r\n");   //回文末尾  
+	p10 = p10+4; 
+	
+  int head_len = (int)(p10 - head);
+      printf("head_len = %d\n",head_len);
+	
+	//写入去头的一次数据 
+	  int len  =size1-head_len; 
+	  write(fd,p10,len);
+	  load_size =+  len;
+	
+	
+	while(1)
+	{
+	//回收HTTP 服务器的消息
+	char  buf[4096]={0};
+	int size=read(tcp_socket,buf,4096);
+		load_size += size;
+		printf("file_size=%d load_size=%d\n",file_size,load_size);
+		if(file_size == load_size)
+		{
+			printf("文件下载完毕\n");
+			write(fd,buf,size);
+			
+			break;
+		}
+	     //把数据写入到本地文件中 
+		   write(fd,buf,size);
+	
+		//printf("buf=%s\n",buf);
+	}
+#endif	
+	
+	/* close(fd); 
+	close(tcp_socket); */
+	
+}
+
+void pic_download_show()
+{
+    
+    get_pic();
+
+
+    lcd_open();
+    lcd_draw_jpg(0,0,"./download/1.jpeg",1);
+    lcd_close();
+
+
+    fd_set set;
+    FD_ZERO(&set);
+    FD_SET(0,&set);
+    struct timeval time;
+    time.tv_sec=20;
+    time.tv_usec=0;
+    char cmdd[200];
+    int ret=select(1,&set,NULL,NULL,&time);
+    if(ret>0)
+    {
+        if(FD_ISSET(0,&set))
+        {
+            scanf("%s",cmdd);
+            printf("正在退出。。。\n");
+            return ;
+
+        }
+    }
+    if(ret==0)
+    {
+        printf("到达最大显示时间\n");
+        return ;
+    }
+    if(ret<0)
+    {
+        return ;
+    }
+
+}
+
+bool check_ip(char *cmd)
+{
+    char ip[20]={0};
+    if(strlen(cmd)>16)
+    {
+        return false;
+    }
+    strcpy(ip,cmd);
+    for(int i=0;i<strlen(ip);i++)
+    {
+        if(ip[i]>'9'||ip[i]<'0')
+        {
+            if(ip[i]!='.')
+                return false;
+        }
+    }
+
+    char *p=strtok(ip,".");
+    if(atoi(p)>255||atoi(p)<0)
+    {
+        return false;
+    }
+    while(1)
+    {
+        p=strtok(NULL,".");
+        if(p==NULL)
+        {
+            break;
+        }
+        if(atoi(p)>255||atoi(p)<0)
+        {
+            return false;
+        }
+    }
+    return true;
+
+}
+
+
+
 
 

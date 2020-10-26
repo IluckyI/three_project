@@ -13,15 +13,18 @@
 
 static unsigned char g_color_buf[FB_SIZE]={0};
 
-int  lcd_fd;
-int *mmap_fd;
+/* int  lcd_fd;
+int *mmap_fd; */
 
 
 
 //初始化LCD
 int lcd_open(void)
 {
+
+
 	lcd_fd = open("/dev/fb0", O_RDWR);
+
 	
 	if(lcd_fd<0)
 	{
@@ -36,6 +39,8 @@ int lcd_open(void)
 									lcd_fd, 				//有效的文件描述词
 									0						//被映射对象内容的起点
 								);
+	
+	
 	return lcd_fd;
 
 }
@@ -136,8 +141,8 @@ int show_video_data(unsigned int x,unsigned int y,char *pjpg_buf,unsigned int jp
 	return 0;
 }
 
-//显示正常jpg图片                                           1.jpg
-int lcd_draw_jpg(unsigned int x,unsigned int y,const char *pjpg_path)  
+//显示正常jpg图片                                           1.jpg		1开启自动缩放功能 0关闭
+int lcd_draw_jpg(unsigned int x,unsigned int y,const char *pjpg_path,int flag_t) 
 {
 	/*定义解码对象，错误处理对象*/
 	struct 	jpeg_decompress_struct 	cinfo;
@@ -208,7 +213,13 @@ int lcd_draw_jpg(unsigned int x,unsigned int y,const char *pjpg_path)
 	
 	x_e	= x_s +cinfo.output_width;
 	y_e	= y  +cinfo.output_height;	
+	int num_height = 0;
+	int num_width = 0;
 
+	int flag=0;
+	double x_b=1;//x，y的比例
+	double y_b=1;
+	char lcd_buf[480][800]={0};
 	/*读解码数据*/
 	while(cinfo.output_scanline < cinfo.output_height )
 	{		
@@ -219,29 +230,42 @@ int lcd_draw_jpg(unsigned int x,unsigned int y,const char *pjpg_path)
 		
 		for(i=0; i<cinfo.output_width; i++)
 		{
-			/* 不显示的部分 */
-			/* if(y_n>g_jpg_in_jpg_y && y_n<g_jpg_in_jpg_y+240)
-				if(x_n>g_jpg_in_jpg_x && x_n<g_jpg_in_jpg_x+320)
-				{
-					pcolor_buf +=3;		
-					x_n++;			
-					continue;
-				} */
-				
+
 			/* 获取rgb值 */
 			color = 		*(pcolor_buf+2);
 			color = color | *(pcolor_buf+1)<<8;
-			color = color | *(pcolor_buf)<<16;	
+			color = color | *(pcolor_buf)<<16;	 
 			
 			/* 显示像素点 */
-			if (x_n <= 799 && y_n <= 479)
-			{
-				lcd_draw_point(x_n,y_n,color);
-				// lcd_buf[y_n][x_n] = color ;
+			if (flag_t == 1)
+			{		
+				if (cinfo.output_width >=LCD_WIDTH)
+				{
+					num_width = i*LCD_WIDTH/cinfo.output_width;//缩小长
+				}				
+				if (cinfo.output_height >=LCD_HEIGHT)
+				{
+					num_height = y_n*LCD_HEIGHT/cinfo.output_height;
+				}
 			}
-			
-			
-			
+			if (flag_t == 1)   //自动缩放
+			{	
+				if(flag!=1)
+				{
+					lcd_draw_point(num_width,num_height,color);
+				}
+				else
+				{
+					lcd_draw_point(x_n,y_n,color);	
+				}
+						
+			}
+			else
+			{
+				lcd_draw_point(x_n,y_n,color);	
+			}
+				 //lcd_buf[y_n][x_n] = color ;
+
 			pcolor_buf +=3;
 			
 			x_n++;
@@ -252,7 +276,7 @@ int lcd_draw_jpg(unsigned int x,unsigned int y,const char *pjpg_path)
 		
 		x_n = x_s;
 		
-	}		
+	}
 
 
 			

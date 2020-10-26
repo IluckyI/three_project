@@ -14,13 +14,14 @@ typedef struct VideoBuffer {
 
 #define BUFFER_COUNT 4
 VideoBuffer1 framebuf[BUFFER_COUNT]; 
-
+int  lcd_fd;
+int *mmap_fd;
 
 //函数声明
 unsigned long file_size_get(const char *pfile_path);
 void lcd_close(void);
 int show_video_data(unsigned int x,unsigned int y,char *pjpg_buf,unsigned int jpg_buf_size);  
-int lcd_draw_jpg(unsigned int x,unsigned int y,const char *pjpg_path);
+int lcd_draw_jpg(unsigned int x,unsigned int y,const char *pjpg_path,int flag_t);
 void lcd_draw_point(unsigned int x,unsigned int y, unsigned int color);
 int mmap_lcd(void);
 int lcd_open(void);
