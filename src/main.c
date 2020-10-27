@@ -59,6 +59,7 @@ void shutdown_0();
 int get_pic();
 void pic_download_show();
 void music_get();
+
 enum position
 {
     EXIT=0,
@@ -66,7 +67,7 @@ enum position
     WEATHER,
     CHAT,
     PIC,
-    IP
+    MUSIC
 
 };
 
@@ -123,10 +124,12 @@ int main()
                 pic_download_show();
                 break;
             }
-            case IP:
+            case MUSIC:
             {
                 pthread_cancel(tid);
-                //music_get();
+                pthread_create(&tid,NULL,time_show_chat,NULL);
+                pthread_detach(tid);
+                music_get();
 
                 break;
             }
@@ -398,9 +401,9 @@ int check_cmd( char  *cmd)
     {
         return PIC;
     }
-    if(strstr(cmd,"ip"))
+    if(strstr(cmd,"音乐"))
     {
-        return IP;
+        return MUSIC;
     }
     return 10;
 
@@ -584,13 +587,9 @@ void weather()
 
 }
 
-
-
-
-//临时》》
-void get_TS()
+void music_get()
 {
-    struct hostent *host=gethostbyname("v1.alapi.cn");
+
     int tcp_socket=socket(AF_INET, SOCK_STREAM, 0);
     if(tcp_socket<0)
     {
@@ -626,6 +625,264 @@ void get_TS()
     printf("cmd:%s\n",http_head);
     int i=0;
 
+
+        //发HTTTP 请求协议  
+        char head[10240*100]={0};
+        write(tcp_socket,http_head,strlen(http_head));
+
+        // char  head[1024*10] ={0};
+        
+        //读取回应内容
+        int size_one = read(tcp_socket,head,sizeof(head));
+        if(strlen(head)==0)
+        {
+            show_session("断开连接");
+            sleep(2);
+            return ;
+        }
+        char * p=strstr(head,"{");
+        char *q=strstr(head,"}}");
+        int len=(int)(q-p)+strlen("}}");
+
+        char tmp[1024]={0};
+        strncpy(tmp,p,len);
+        printf("tmp:%s\n",tmp);
+        cJSON * obj = cJSON_Parse(tmp);
+        if(obj==NULL)
+        {
+            show_session("数据获取失败，尝试重新获取中...\n");
+            sleep(1);
+            return ;
+            
+        }
+        else
+        {
+            printf("正确的json数据\n");
+            show_session("跳转中......");
+        }
+        //获取歌曲信息
+        cJSON *data=cJSON_GetObjectItem(obj,"data");
+        cJSON *name=cJSON_GetObjectItem(data,"name");
+        cJSON *urll=cJSON_GetObjectItem(data,"url");
+        cJSON *picurl=cJSON_GetObjectItem(data,"picurl");
+        cJSON *artistname=cJSON_GetObjectItem(data,"artistsname");
+
+
+
+        char host[100]={0};
+        char url[256]={0};
+        char *tmp2=strstr(urll->valuestring,"/song");
+        //printf("%s,\n",tmp2);
+        char *tmp3=strstr(urll->valuestring,"music");
+        strncpy(host,tmp3,(int)(tmp2-tmp3));
+        printf("host:%s\n",host);
+        strncpy(url,tmp2,strlen(tmp2));
+        printf("url:%s\n",url);
+
+
+        //---------------------------------第二次请求
+    
+        struct hostent *Host;
+        Host=gethostbyname(host);
+
+        int tcp_socket1 = socket(AF_INET, SOCK_STREAM, 0);
+        if(tcp_socket1<0)
+        {
+            perror("");
+            return ;
+        }
+
+
+        struct sockaddr_in service_addr_1;
+        service_addr_1.sin_port = htons(80);
+        service_addr_1.sin_family = AF_INET;
+        service_addr_1.sin_addr.s_addr = inet_addr(inet_ntoa(*(struct in_addr*)Host->h_addr_list[0])); //服务器的IP地址
+
+        ret = connect(tcp_socket1, (struct sockaddr *)&service_addr_1,sizeof(service_addr_1));
+        if (ret == -1 )
+        {
+            printf("connect lost!!!\n");
+            return ;
+        }else
+        {
+            printf("connect success!!!\n");
+        }
+        
+   //制定 HTTP 请求协议   
+        char  http_head2[1024]={0};
+        sprintf(http_head2,"GET %s HTTP/1.1\r\nHost:%s\r\n\r\n",url,host);
+        printf("cmd:%s\n",http_head2);
+        int i2=0;
+        
+    restart2:
+    {
+        //发HTTTP 请求协议  
+        char head2[10240]={0};
+        write(tcp_socket1,http_head2,strlen(http_head2));
+
+        // char  head[1024*10] ={0};
+        
+        //读取回应内容
+        size_one = read(tcp_socket1,head2,sizeof(head2));
+        if(strlen(head)==0)
+        {
+            show_session("断开连接");
+            sleep(2);
+            return ;
+        }
+        printf("head2:%s\n",head2);
+
+
+
+        char *p2_2=strstr(head2,"Location: ");
+        p2_2=p2_2+strlen("Location: http://" );
+        char *p3_2=strstr(p2_2,"/");
+        char host_2[1000]={0};
+        int host_2_len=(int)(p3_2-p2_2);
+        strncpy(host_2,p2_2,host_2_len);
+        char *p4_2 =strstr(p2_2,"\r\n");
+        char url_2[256]={0};
+        int url_2_len=(int)(p4_2-p3_2);
+        strncpy(url_2,p3_2,url_2_len);
+
+        printf("host:%s\turl:%s\n",host_2,url_2);
+
+        char cmd_2[1024]={0};
+        
+
+
+        //--------------------------------------第三次请求
+        sprintf(cmd_2,"GET %s HTTP/1.1\r\nHost:%s\r\n\r\n",url_2,host_2);
+        printf("%s\n",cmd);
+
+
+        
+        struct hostent *Host_3;
+        Host_3=gethostbyname(host_2);
+
+        int tcp_socket3 = socket(AF_INET, SOCK_STREAM, 0);
+        if(tcp_socket3<0)
+        {
+            perror("");
+            return ;
+        }
+            
+
+        struct sockaddr_in service_addr_3;
+        service_addr_3.sin_port = htons(80);
+        service_addr_3.sin_family = AF_INET;
+        service_addr_3.sin_addr.s_addr = inet_addr(inet_ntoa(*(struct in_addr*)Host_3->h_addr_list[0])); //服务器的IP地址
+
+        int ret = connect(tcp_socket3, (struct sockaddr *)&service_addr_3,sizeof(service_addr_3));
+        if (ret == -1 )
+        {
+            printf("connect lost!!!\n");
+            return ;
+        }else
+        {
+            printf("connect success!!!\n");
+        }
+        char buf_3[10240];
+        write(tcp_socket3,cmd_2,strlen(cmd_2));
+
+        int size1=read(tcp_socket3,buf_3,sizeof(buf_3));
+        printf("%s\n",buf_3);
+
+        
+
+        //处理信息
+        int file_size=0;
+        //下载的大小 
+        int load_size=0;
+        
+        char *p_3 =  strstr(buf_3,"Content-Length");  //查找关键字
+        
+        sscanf(p_3,"Content-Length:%d\r\n",&file_size);
+        
+        printf("file_size=%d\n",file_size);
+        
+        
+        //求出头数据的长度 
+        p_3 = strstr(buf_3,"\r\n\r\n");   //回文末尾  
+        p_3 = p_3+4; 
+        
+        int head_len = (int)(p_3 - buf_3);
+        printf("head_len = %d\n",head_len);
+        int fd=open("./music/1.mp3",O_CREAT|O_TRUNC|O_RDWR);
+        
+        //写入去头的一次数据 
+        int len  =size1-head_len; 
+        write(fd,p,len);
+        load_size =+  len;
+        
+        show_session("正在下载");
+        while(1)
+        {
+        //回收HTTP 服务器的消息
+            char  buf[40960]={0};
+            int size=read(tcp_socket3,buf,4096);
+            load_size += size;
+            printf("file_size=%d load_size=%d\n",file_size,load_size);
+            if(file_size == load_size)
+            {
+                printf("文件下载完毕\n");
+                write(fd,buf,size);
+                
+                break;
+            }
+            //把数据写入到本地文件中 
+            write(fd,buf,size);
+        
+            //printf("buf=%s\n",buf);
+        }
+        
+        
+        
+        close(fd); 
+        close(tcp_socket);
+        close(tcp_socket3);
+        close(tcp_socket1);
+        char cmd_3[256]={0};
+        sprintf(cmd_3,"%s   %s",name->valuestring,artistname->valuestring);
+
+        show_session(cmd_3);
+        system("chmod 777 ./music/1.mp3");
+        system("mplayer -slave -quiet ./music/1.mp3 &");
+                                ///监控键盘，按任意键退出，或者等待达到   显示时间   20s
+        fd_set set;
+        FD_ZERO(&set);
+        FD_SET(0,&set);
+        struct timeval time;
+        time.tv_sec=60;
+        time.tv_usec=0;
+        char cmdd[200];
+        ret=select(1,&set,NULL,NULL,&time);
+        if(ret>0)
+        {
+            if(FD_ISSET(0,&set))
+            {
+                scanf("%s",cmdd);
+                system("killall -9 mplayer");
+                printf("正在退出。。。\n");
+                return ;
+
+            }
+        }
+        if(ret==0)
+        {
+            printf("到达最大显示时间\n");
+            system("killall -9 mplayer");
+            return ;
+        }
+        if(ret<0)
+        {
+            return ;
+        }
+
+
+
+        return ;
+    }
 }
 
 
@@ -905,6 +1162,7 @@ int get_pic()
             sleep(2);
             return 0;
         }
+        //https://v1.alapi.cn/api/acg
         main_host=gethostbyname("www.dmoe.cc");
         if(main_host==NULL)
         {
